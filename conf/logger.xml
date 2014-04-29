@@ -1,0 +1,43 @@
+<configuration> 
+  <timestamp key="bySecond" datePattern="yyyyMMdd'T'HHmmss"/>
+  <appender name="TRACE_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+    <fileNamePattern>./logs/trace-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+    <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+        <maxFileSize>50MB</maxFileSize>
+      </timeBasedFileNamingAndTriggeringPolicy>
+    </rollingPolicy>
+    <!-- <filter class="integrated.tools.MarkerFilter">
+      <marker>NOROOT</marker>
+      <OnMatch>DENY</OnMatch>
+    </filter> -->
+    <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+      <level>TRACE</level>
+    </filter>
+    <encoder>
+      <pattern>%date %level [%thread] %logger{10} [%file:%line] %msg%n</pattern>
+    </encoder>
+  </appender>
+  <appender name="INFO_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">    
+    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">      
+      <fileNamePattern>./logs/info-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+      <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+        <maxFileSize>50MB</maxFileSize>
+      </timeBasedFileNamingAndTriggeringPolicy>
+    </rollingPolicy>
+    <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+      <level>INFO</level>
+    </filter>
+   <!--  <filter class="integrated.tools.MarkerFilter">
+      <marker>NOROOT</marker>
+      <OnMatch>DENY</OnMatch>
+    </filter> -->
+    <encoder>
+      <pattern>%date %level [%thread] %logger{10} [%file:%line] %msg%n</pattern>
+    </encoder>
+  </appender>  
+  <root level="TRACE">
+    <appender-ref ref="TRACE_FILE"/>
+    <appender-ref ref="INFO_FILE"/>      
+  </root>
+</configuration>
