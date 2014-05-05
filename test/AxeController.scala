@@ -23,5 +23,14 @@ class AxeControllerSpec extends Specification {
       // contentAsString(result) must contain("Hello from Scala")
     }
 
+    "parseLv2 should return JSON" in new WithApplication {
+      val result: Future[SimpleResult]  = controllers.AxeController.parseLv2(FakeRequest())
+
+      status(result) must equalTo(OK)
+      // contentType(result) must beSome("application/json")
+      // charset(result) must beSome("utf-8")
+      // contentAsString(result) must contain("Hello from Scala")
+    }
+
   }
 }
