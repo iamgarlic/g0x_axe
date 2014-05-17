@@ -6,6 +6,7 @@ GET     /                           controllers.MainController.index()
 GET     /g0v/axe/lv1				controllers.AxeController.parseLv1()
 GET     /g0v/axe/lv2				controllers.AxeController.parseLv2()
 GET     /g0v/axe/lv3				controllers.AxeController.parseLv3()
+GET     /g0v/axe/lv4				controllers.AxeController.parseLv4()
 
 
 # Map static resources from the /public folder to the /assets URL path

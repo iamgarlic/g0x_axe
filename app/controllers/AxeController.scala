@@ -26,13 +26,10 @@ object AxeController extends Controller {
 	val tableRegEx = """<tr><td>([^/]*)</td><td>([^/]*)</td><td>([^/]*)</td><td>([^/]*)</td><td>([^/]*)</td><td>([^/]*)</td></tr>""".r 
   val tableLv2RegEx = """<tr><td>([^/]*)</td><td>([^/]*)</td><td>([^/]*)</td></tr>""".r 
 
-  //[<a href="?page=1">1</a>]
-  // val pageRegEx = """[<a href="page=1">([0-9]*)</a>]""".r
   val pageRegEx = """<a href="([^/]*)">([0-9]*)</a>""".r
 
 
   val system = ActorSystem("mySystem")
-
 
   def parseLv1 = Action.async {
     val holder /*: WSRequestHolder*/ = WS.url("http://axe-level-1.herokuapp.com/")
@@ -146,6 +143,65 @@ object AxeController extends Controller {
     }  
   }
 
+  def parseLv4 = Action.async {  
 
+    val userAgent = """Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/34.0.1847.137 Safari/537.36"""       
+    WS.url("http://axe-level-4.herokuapp.com/lv4").withHeaders("User-Agent"->userAgent).get.flatMap {
+      response => 
+        val respBody = response.getAHCResponse.getResponseBody("utf-8").replaceAll("""\n""", "")        
+        // println(s">>> $respBody")
+        val pages = {
+          try{                            
+            for (pageRegEx(ps, pn) <- pageRegEx findAllIn respBody) // ps: ?page=1 // pn: 1
+            yield{                        
+              pn
+            }             
+          } catch {
+            case x: Throwable => 
+              play.Logger.error("Exception:" + x.toString)
+              Seq()
+          }   
+        }
+
+        var results = Map[Int, String]()
+        var pageFutures = List[Future[Unit]]()     
+
+        pages.foreach{ pn =>           
+          val url = s"http://axe-level-4.herokuapp.com/lv4/?page=${pn}"
+          val ref = "http://axe-level-4.herokuapp.com/lv4/?page=%d".format(pn.toInt-1)
+          println(s"fetch page: $url referer: $ref")
+
+          val holder = pn match {
+            case "1" => WS.url(url).withHeaders("User-Agent" -> userAgent)
+            case _ => WS.url(url).withHeaders("Referer"->ref, "User-Agent" -> userAgent)
+          }
+          
+          val f = holder.get.map{ html => 
+            val utf8Html = html.getAHCResponse.getResponseBody("utf-8").replaceAll("""\n""", "")             
+            results += pn.toInt -> utf8Html
+            // println(s"($pn) done")
+          }  
+          pageFutures = f +: pageFutures          
+        }
+
+        for(ff <- Future.sequence(pageFutures)) yield {
+          // println("start merging:")
+
+          val parsed = results.map{ result =>
+            result._1 -> { // {"town": "東區", "village": "東勢里", "name" : "林錦全"}
+              for (tableLv2RegEx(town, village, name) <- tableLv2RegEx findAllIn result._2.replaceAll("""\s""", "")) 
+              yield{
+                s"""{"town": "${town}", "village": "${village}", "name": "${name}"}"""                  
+              }
+            }.drop(1).toSeq 
+          }
+
+          // sort by page index, merge to single List, then compose response
+          val response = parsed.toList.sortBy(a=>a._1).map(b=>b._2).flatMap(c=>c).mkString("[",",","]")          
+          Ok(response).as("application/json")
+        }   
+    }  
+
+  }
 
 }
