@@ -20,10 +20,10 @@ case class ParsedResponse(value: String)
 
 object AxeController extends Controller {
 
-  implicit val fooWrites = Json.writes[ParsedResponse]	
+  implicit val fooWrites = Json.writes[ParsedResponse]  
   
   val xmlRegEx = """(.*)<table class="table">(.*)</table>.*""".r 
-	val tableRegEx = """<tr><td>([^/]*)</td><td>([^/]*)</td><td>([^/]*)</td><td>([^/]*)</td><td>([^/]*)</td><td>([^/]*)</td></tr>""".r 
+  val tableRegEx = """<tr><td>([^/]*)</td><td>([^/]*)</td><td>([^/]*)</td><td>([^/]*)</td><td>([^/]*)</td><td>([^/]*)</td></tr>""".r 
   val tableLv2RegEx = """<tr><td>([^/]*)</td><td>([^/]*)</td><td>([^/]*)</td></tr>""".r 
 
   val pageRegEx = """<a href="([^/]*)">([0-9]*)</a>""".r
@@ -32,24 +32,23 @@ object AxeController extends Controller {
   val system = ActorSystem("mySystem")
 
   def parseLv1 = Action.async {
-    val holder /*: WSRequestHolder*/ = WS.url("http://axe-level-1.herokuapp.com/")
-    holder.get.map {
+    WS.url("http://axe-level-1.herokuapp.com/").get.map {
       response => 
-      	val respBody = response.getAHCResponse.getResponseBody("utf-8").replaceAll("""\n""", "")
-				val rows = {
-					try{						
-						val xmlRegEx(first, table) = respBody						
-						for (tableRegEx(name, chinese, math, science, society, health) <- tableRegEx findAllIn table.replaceAll("""\s""", "")) 
-						yield {							
-						  s"""{"name": "${name}", "grades": {"國語": ${chinese}, "數學": ${math}, "自然": ${science}, "社會": ${society}, "健康教育": ${health}}}"""
-						}							
-					} catch {
-						case x: Throwable => 
-							play.Logger.error("Exception:" + x.toString)
-							Seq()
-					}		
-				}
-				val js = s"""[${rows.toSeq.drop(1).mkString(",")}]"""
+        val respBody = response.getAHCResponse.getResponseBody("utf-8").replaceAll("""\n""", "")
+        val rows = {
+          try{            
+            val xmlRegEx(first, table) = respBody           
+            for (tableRegEx(name, chinese, math, science, society, health) <- tableRegEx findAllIn table.replaceAll("""\s""", "")) 
+            yield {             
+              s"""{"name": "${name}", "grades": {"國語": ${chinese}, "數學": ${math}, "自然": ${science}, "社會": ${society}, "健康教育": ${health}}}"""
+            }             
+          } catch {
+            case x: Throwable => 
+              play.Logger.error("Exception:" + x.toString)
+              Seq()
+          }   
+        }
+        val js = s"""[${rows.toSeq.drop(1).mkString(",")}]"""
         play.Logger.info("parsed:" + js)
         Ok(js).as("application/json")
     }     
