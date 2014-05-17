@@ -5,9 +5,16 @@ import play.api.libs.json.Json
 import play.api.Routes
 
 import play.api.libs.ws._
-import scala.concurrent.Future  
+import scala.concurrent.{Future, Promise}
 import scala.util.{Success,Failure}
 import play.api.libs.concurrent.Execution.Implicits._
+
+import akka.actor.ActorSystem
+import com.typesafe.config.ConfigFactory
+import akka.actor.Actor
+// import akka.actor.PoisonPill
+import akka.actor.Props
+
 
 case class ParsedResponse(value: String)
 
@@ -22,6 +29,10 @@ object AxeController extends Controller {
   //[<a href="?page=1">1</a>]
   // val pageRegEx = """[<a href="page=1">([0-9]*)</a>]""".r
   val pageRegEx = """<a href="([^/]*)">([0-9]*)</a>""".r
+
+
+  val system = ActorSystem("mySystem")
+
 
   def parseLv1 = Action.async {
     val holder /*: WSRequestHolder*/ = WS.url("http://axe-level-1.herokuapp.com/")
@@ -93,5 +104,48 @@ object AxeController extends Controller {
     }  
 
   }
+
+  // 
+  def parseLv3 = Action.async {         
+    WS.url("http://axe-level-1.herokuapp.com/lv3").get.flatMap {
+      response => 
+        val respBody = response.getAHCResponse.getResponseBody("utf-8").replaceAll("""\n""", "")           
+        val cookieRegEx = """(.*); path=(.*)""".r
+        // println(s"Set-Cookie: $session")
+        val header = response.header("Set-Cookie") match {
+          case Some(s) => 
+            val cookieRegEx(cookie, path) = s
+            Some(Seq("Cookie" -> cookie.toString))
+          case _ =>   
+            None
+        }
+
+        val next = "http://axe-level-1.herokuapp.com/lv3/?page=next"
+        
+        var results = Seq[String]()
+        results = { 
+          for (tableLv2RegEx(town, village, name) <- tableLv2RegEx findAllIn respBody.replaceAll("""\s""", "")) 
+          yield{
+            s"""{"town": "${town}", "village": "${village}", "name": "${name}"}"""                
+          }
+        }.drop(1).toSeq        
+        // results.foreach(r=>println(s"Row: $r"))
+
+        import services._
+        // trigger actor
+        val p = Promise[Seq[String]]
+        val fetchActor = system.actorOf(Props(classOf[FetchActors.Lv3PageFetcher]))
+        fetchActor ! (FetchActors.FetchRequest(next, header, None), p)
+
+        for(aggrigated <- p.future) 
+        yield {
+          results = results ++: aggrigated          
+          val js = s"""[${results.mkString(",")}]"""
+          Ok(js).as("application/json")
+        }
+    }  
+  }
+
+
 
 }
