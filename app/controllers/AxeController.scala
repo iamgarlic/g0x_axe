@@ -72,7 +72,7 @@ object AxeController extends Controller {
           }   
         }
         
-        var results = Map[Int, Seq[String]]()
+        var results = Map[Int, String]()
         var pageFutures = List[Future[Unit]]()     
 
         pages.foreach{ pn =>           
@@ -81,21 +81,23 @@ object AxeController extends Controller {
           
           val f = WS.url(url).get.map{ html => 
             val utf8Html = html.getAHCResponse.getResponseBody("utf-8").replaceAll("""\n""", "") 
-          
-            val rows = { // {"town": "東區", "village": "東勢里", "name" : "林錦全"}
-              for (tableLv2RegEx(town, village, name) <- tableLv2RegEx findAllIn utf8Html.replaceAll("""\s""", "")) 
-              yield{
-                s"""{"town": "${town}", "village": "${village}", "name": "${name}"}"""                
-              }
-            }
-            results += pn.toInt -> rows.drop(1).toSeq //utf8Html
+            results += pn.toInt -> utf8Html          
           }  
           pageFutures = f +: pageFutures          
         }
 
         for(ff <- Future.sequence(pageFutures)) yield {
+          val parsed = results.map{ result =>
+            result._1 -> { // {"town": "東區", "village": "東勢里", "name" : "林錦全"}
+              for (tableLv2RegEx(town, village, name) <- tableLv2RegEx findAllIn result._2.replaceAll("""\s""", "")) 
+              yield{
+                s"""{"town": "${town}", "village": "${village}", "name": "${name}"}"""                  
+              }
+            }.drop(1).toSeq 
+          }
+
           // sort by page index, merge to single List, then compose response
-          val response = results.toList.sortBy(a=>a._1).map(b=>b._2).flatMap(a=>a).mkString("[",",","]")          
+          val response = parsed.toList.sortBy(a=>a._1).map(b=>b._2).flatMap(a=>a).mkString("[",",","]")          
           Ok(response).as("application/json")
         }   
     }  
