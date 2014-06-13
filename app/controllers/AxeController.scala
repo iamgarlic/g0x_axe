@@ -71,30 +71,26 @@ object AxeController extends Controller {
           }   
         }
         
-        var results = Map[Int, String]()
-        var pageFutures = List[Future[Unit]]()     
+        // var results = Map[Int, String]()
+        var pageFutures = List[Future[(Int, String)]]()     
 
         pages.foreach{ pn =>           
           val url = s"http://axe-level-1.herokuapp.com/lv2/?page=${pn}"
-          println(s"fetch page: $url")
+          // println(s"fetch page: $url")
           
           val f = WS.url(url).get.map{ html => 
             val utf8Html = html.getAHCResponse.getResponseBody("utf-8").replaceAll("""\n""", "") 
-            results += pn.toInt -> utf8Html          
+            pn.toInt -> utf8Html          
           }  
           pageFutures = f +: pageFutures          
         }
 
         for(ff <- Future.sequence(pageFutures)) yield {
-          val parsed = results.map{ result =>
-            result._1 -> { // {"town": "東區", "village": "東勢里", "name" : "林錦全"}
-              for (tableLv2RegEx(town, village, name) <- tableLv2RegEx findAllIn result._2.replaceAll("""\s""", "")) 
-              yield{
-                s"""{"town": "${town}", "village": "${village}", "name": "${name}"}"""                  
-              }
-            }.drop(1).toSeq 
+          val parsed = ff.map{ result =>
+            result._1 -> extractRows(result._2)            
           }
 
+          // println(s"done merging: ${parsed.size}")
           // sort by page index, merge to single List, then compose response
           val response = parsed.toList.sortBy(a=>a._1).map(b=>b._2).flatMap(a=>a).mkString("[",",","]")          
           Ok(response).as("application/json")
@@ -180,13 +176,12 @@ object AxeController extends Controller {
           }   
         }
 
-        var results = Map[Int, String]()
-        var pageFutures = List[Future[Unit]]()     
+        var pageFutures = List[Future[(Int, String)]]()     
 
         pages.foreach{ pn =>           
           val url = s"http://axe-level-4.herokuapp.com/lv4/?page=${pn}"
           val ref = "http://axe-level-4.herokuapp.com/lv4/?page=%d".format(pn.toInt-1)
-          println(s"fetch page: $url referer: $ref")
+          // println(s"fetch page: $url referer: $ref")
 
           val holder = pn match {
             case "1" => WS.url(url).withHeaders("User-Agent" -> userAgent)
@@ -194,25 +189,17 @@ object AxeController extends Controller {
           }
           
           val f = holder.get.map{ html => 
-            val utf8Html = html.getAHCResponse.getResponseBody("utf-8").replaceAll("""\n""", "")             
-            results += pn.toInt -> utf8Html
-            // println(s"($pn) done")
+            val utf8Html = html.getAHCResponse.getResponseBody("utf-8").replaceAll("""\n""", "")                         
+            pn.toInt -> utf8Html
           }  
           pageFutures = f +: pageFutures          
         }
 
-        for(ff <- Future.sequence(pageFutures)) yield {
-          // println("start merging:")
-
-          val parsed = results.map{ result =>
-            result._1 -> { // {"town": "東區", "village": "東勢里", "name" : "林錦全"}
-              for (tableLv2RegEx(town, village, name) <- tableLv2RegEx findAllIn result._2.replaceAll("""\s""", "")) 
-              yield{
-                s"""{"town": "${town}", "village": "${village}", "name": "${name}"}"""                  
-              }
-            }.drop(1).toSeq 
+        for(ff <- Future.sequence(pageFutures)) yield {          
+          val parsed = ff.map{ result =>
+            result._1 -> extractRows(result._2)            
           }
-
+          // println(s"done merging: ${parsed.size}")
           // sort by page index, merge to single List, then compose response
           val response = parsed.toList.sortBy(a=>a._1).map(b=>b._2).flatMap(c=>c).mkString("[",",","]")          
           Ok(response).as("application/json")
