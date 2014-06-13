@@ -112,33 +112,17 @@ object AxeController extends Controller {
         // println(s"Set-Cookie: $session")
         val header = response.header("Set-Cookie") match {
           case Some(s) => 
-            val cookieRegEx(cookie, path) = s
-            // Some(Seq("Cookie" -> cookie.toString))
+            val cookieRegEx(cookie, path) = s            
             Seq("Cookie" -> cookie.toString)
-          case _ =>   
-            //None
+          case _ =>               
             Seq()
         }
 
         val next = "http://axe-level-1.herokuapp.com/lv3/?page=next"
         
-        var results = Seq[String]()
-        results = { 
-          for (tableLv2RegEx(town, village, name) <- tableLv2RegEx findAllIn respBody.replaceAll("""\s""", "")) 
-          yield{
-            s"""{"town": "${town}", "village": "${village}", "name": "${name}"}"""                
-          }
-        }.drop(1).toSeq        
-        // results.foreach(r=>println(s"Row: $r"))
-
-        import services._
-        // trigger actor
-        // val p = Promise[Seq[String]]
-        // val fetchActor = system.actorOf(Props(classOf[FetchActors.Lv3PageFetcher]))
-        // fetchActor ! (FetchActors.FetchRequest(next, header, None), p)
+        var results = extractRows(respBody)
         var rows = Seq[String]()
         for(aggrigated <- fetch(next, header, rows)) 
-        // for(aggrigated <-p.future)
         yield {
           results = results ++: aggrigated          
           val js = s"""[${results.mkString(",")}]"""
