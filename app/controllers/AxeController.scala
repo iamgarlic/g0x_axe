@@ -22,7 +22,7 @@ object AxeController extends Controller {
 
   implicit val fooWrites = Json.writes[ParsedResponse]  
   
-  val xmlRegEx = """(.*)<table class="table">(.*)</table>.*""".r 
+  // val xmlRegEx = """(.*)<table class="table">(.*)</table>.*""".r 
   val tableRegEx = """<tr><td>([^/]*)</td><td>([^/]*)</td><td>([^/]*)</td><td>([^/]*)</td><td>([^/]*)</td><td>([^/]*)</td></tr>""".r 
   val tableLv2RegEx = """<tr><td>([^/]*)</td><td>([^/]*)</td><td>([^/]*)</td></tr>""".r 
 
@@ -37,8 +37,8 @@ object AxeController extends Controller {
         val respBody = response.getAHCResponse.getResponseBody("utf-8").replaceAll("""\n""", "")
         val rows = {
           try{            
-            val xmlRegEx(first, table) = respBody           
-            for (tableRegEx(name, chinese, math, science, society, health) <- tableRegEx findAllIn table.replaceAll("""\s""", "")) 
+            // val xmlRegEx(first, table) = respBody           
+            for (tableRegEx(name, chinese, math, science, society, health) <- tableRegEx findAllIn respBody.replaceAll("""\s""", "")) 
             yield {             
               s"""{"name": "${name}", "grades": {"國語": ${chinese}, "數學": ${math}, "自然": ${science}, "社會": ${society}, "健康教育": ${health}}}"""
             }             
@@ -113,9 +113,11 @@ object AxeController extends Controller {
         val header = response.header("Set-Cookie") match {
           case Some(s) => 
             val cookieRegEx(cookie, path) = s
-            Some(Seq("Cookie" -> cookie.toString))
+            // Some(Seq("Cookie" -> cookie.toString))
+            Seq("Cookie" -> cookie.toString)
           case _ =>   
-            None
+            //None
+            Seq()
         }
 
         val next = "http://axe-level-1.herokuapp.com/lv3/?page=next"
@@ -131,17 +133,47 @@ object AxeController extends Controller {
 
         import services._
         // trigger actor
-        val p = Promise[Seq[String]]
-        val fetchActor = system.actorOf(Props(classOf[FetchActors.Lv3PageFetcher]))
-        fetchActor ! (FetchActors.FetchRequest(next, header, None), p)
-
-        for(aggrigated <- p.future) 
+        // val p = Promise[Seq[String]]
+        // val fetchActor = system.actorOf(Props(classOf[FetchActors.Lv3PageFetcher]))
+        // fetchActor ! (FetchActors.FetchRequest(next, header, None), p)
+        var rows = Seq[String]()
+        for(aggrigated <- fetch(next, header, rows)) 
+        // for(aggrigated <-p.future)
         yield {
           results = results ++: aggrigated          
           val js = s"""[${results.mkString(",")}]"""
           Ok(js).as("application/json")
         }
     }  
+  }
+
+  def fetch(url: String, headers: Seq[(String, String)], results: Seq[String]): Future[Seq[String]] = {
+    var holder = WS.url(url)
+    headers.foreach{ h => 
+      holder = holder.withHeaders(h)
+    }
+
+    holder.get.flatMap{ response =>
+      val ss = response.getAHCResponse.getResponseBody("utf-8").replaceAll("""\n""", "")                 
+      val newResults = results ++: extractRows(ss)
+
+      // next?
+      if(ss.contains("href='?page=next'"))
+        fetch(url, headers, newResults)
+      else
+        Future{newResults}  
+    }
+  }
+
+  def extractRows(input: String) : Seq[String] = {
+    var rows = Seq[String]()
+    rows = { // {"town": "東區", "village": "東勢里", "name" : "林錦全"}
+      for (tableLv2RegEx(town, village, name) <- tableLv2RegEx findAllIn input.replaceAll("""\s""", "")) 
+      yield{
+        s"""{"town": "${town}", "village": "${village}", "name": "${name}"}"""                
+      }
+    }.drop(1).toSeq  
+    rows
   }
 
   def parseLv4 = Action.async {  
